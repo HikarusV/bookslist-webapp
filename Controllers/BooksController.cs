@@ -9,20 +9,25 @@ using System.Net;
 using System.Text.Json;
 using System;
 using Microsoft.Extensions.Options;
+using Microsoft.Azure.Search;
+using Microsoft.Azure.Search.Models;
 
 namespace BooksCatalogue.Controllers
 {
     public class BooksController : Controller
     {
-        // private string apiEndpoint = "https://bookscatalogueapi-dicoding.azurewebsites.net/api/books/";
-        private string apiEndpoint = "http://localhost:8000/api/books/";
+        private string apiEndpoint = "https://books-list.azurewebsites.net/api/books/";
+        // private string apiEndpoint = "http://localhost:8080/api/books/";
         private readonly HttpClient _client;
         HttpClientHandler clientHandler = new HttpClientHandler();
-        public BooksController()
+
+        private readonly AzureSearchService searchOptions;
+        public BooksController(IOptions<AzureSearchService> _searchOptions)
         {
             // Use this client handler to bypass ssl policy errors
             clientHandler.ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => { return true; };
             _client = new HttpClient(clientHandler);
+            searchOptions = _searchOptions.Value;
         }
 
         // GET: Books
@@ -42,6 +47,62 @@ namespace BooksCatalogue.Controllers
                     return ErrorAction("Error. Status code = " + response.StatusCode + ": " + response.ReasonPhrase);
             }
         }
+
+        public IActionResult Search()
+        {
+            return View();
+        }
+
+        [HttpPost]
+        public async Task<ActionResult> Search(SearchData model)
+        {
+            Console.WriteLine("=================TEST=================");
+            try
+            {
+                Console.WriteLine(model.searchText);
+                if (model.searchText == null)
+                {
+                    model.searchText = "";
+                }
+                Console.WriteLine(model);
+                await RunQueryAsync(model);
+            }
+            catch (System.Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+                Console.WriteLine("=================TEST END=================");
+                return ErrorAction(ex.Message);
+            }
+            Console.WriteLine("=================TEST END=================");
+            return View(model);
+        }
+        
+        private async Task<ActionResult> RunQueryAsync(SearchData model)
+        {
+            Console.WriteLine("----------------------- DEBUG -----------------------");
+            var searchClient = new SearchServiceClient(searchOptions.SearchServiceName, new SearchCredentials(searchOptions.SearchServiceQueryApiKey));
+            Console.WriteLine(searchOptions.SearchServiceQueryApiKey);
+            var indexClient = searchClient.Indexes.GetClient(searchOptions.SearchServiceIndex);
+            Console.WriteLine("1");
+            Console.WriteLine(searchClient.Indexes);
+            Console.WriteLine("2");
+            Console.WriteLine(searchOptions.SearchServiceIndex);
+        
+            var parameters = new SearchParameters
+            {
+                // Parameter berisi field yang ingin ditampilkan pada hasil pencarian
+                Select = new[] { "Id", "Title", "Author", "CoverURL"}
+            };
+            Console.WriteLine("3");
+        
+            model.resultList = await indexClient.Documents.SearchAsync<Book>(model.searchText, parameters);
+
+
+            Console.WriteLine("----------------------- DEBUG END -----------------------");
+            return View("Search", model);
+        }
+
+
 
         // GET: Books/Details/5
         public async Task<IActionResult> Details(int? id)
